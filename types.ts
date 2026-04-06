@@ -47,6 +47,14 @@ export interface PendingPrompt {
 }
 
 /**
+ * A parsed [LOCATION:lat,lon] tag.
+ */
+export interface LocationInfo {
+  latitude: number;
+  longitude: number;
+}
+
+/**
  * The result of parsing UI tags out of an agent message.
  */
 export interface ParsedTags {
@@ -54,6 +62,14 @@ export interface ParsedTags {
   prompt: PromptInfo | null;
   /** Reaction emoji, or null if no [REACT:...] tag */
   reaction: string | null;
+  /** If true, [PIN] tag was present — pin the previous message */
+  pin: boolean;
+  /** If true, [UNPIN] tag was present — unpin the current pinned message */
+  unpin: boolean;
+  /** Parsed location, or null if no [LOCATION:...] tag */
+  location: LocationInfo | null;
+  /** Dice emoji to send, or null if no [DICE] tag (defaults to "🎲") */
+  dice: string | null;
   /** Message text with all tags stripped and whitespace trimmed */
   cleanText: string;
 }

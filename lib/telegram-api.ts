@@ -115,6 +115,68 @@ export class TelegramApi {
     return res.ok;
   }
 
+  /** Unpin the current pinned message in a chat. */
+  async unpinChatMessage(chatId: string): Promise<boolean> {
+    const res = await tgFetch(
+      this.token,
+      "unpinChatMessage",
+      { chat_id: chatId },
+      this.log,
+    );
+    return res.ok;
+  }
+
+  /**
+   * Pin a message in a chat.
+   * Disables notification by default.
+   */
+  async pinChatMessage(
+    chatId: string,
+    messageId: number,
+    disableNotification = true,
+  ): Promise<boolean> {
+    const res = await tgFetch(this.token, "pinChatMessage", {
+      chat_id: chatId,
+      message_id: messageId,
+      disable_notification: disableNotification,
+    }, this.log);
+    return res.ok;
+  }
+
+  /**
+   * Send a location (map pin) to a chat.
+   * Returns message_id on success, null on failure.
+   */
+  async sendLocation(
+    chatId: string,
+    latitude: number,
+    longitude: number,
+  ): Promise<number | null> {
+    const res = await tgFetch<{ message_id: number }>(
+      this.token, "sendLocation",
+      { chat_id: chatId, latitude, longitude },
+      this.log,
+    );
+    return res.ok ? (res.result?.message_id ?? null) : null;
+  }
+
+  /**
+   * Send an animated dice/slot/dart emoji.
+   * Valid emojis: 🎲 🎯 🏀 ⚽ 🎳 🎰
+   * Returns message_id on success, null on failure.
+   */
+  async sendDice(
+    chatId: string,
+    emoji = "🎲",
+  ): Promise<number | null> {
+    const res = await tgFetch<{ message_id: number }>(
+      this.token, "sendDice",
+      { chat_id: chatId, emoji },
+      this.log,
+    );
+    return res.ok ? (res.result?.message_id ?? null) : null;
+  }
+
   /**
    * Add an emoji reaction to a message.
    * Requires Bot API 7.0+ (Telegram 2024+).

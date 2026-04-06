@@ -5,6 +5,10 @@
 // Gives agents two Telegram UI primitives:
 //   [BUTTONS:Question|Option A|Option B]  → inline keyboard prompt
 //   [REACT:👍]                            → emoji reaction on last user message
+//   [PIN]                                 → pin the previous message
+//   [UNPIN]                               → unpin the current pinned message
+//   [LOCATION:lat,lon]                    → drop a map pin
+//   [DICE] / [DICE:🎰]                   → send an animated dice/slot/dart emoji
 //
 // Tags can appear anywhere in an agent message (alone or alongside text).
 // When tags are detected the original message is suppressed; any remaining
@@ -183,11 +187,11 @@ function register(api: any): void {
 
       try {
         log.info(`[${TAG}] parsing tags`);
-        const { prompt, reaction, cleanText } = parseTags(content);
+        const { prompt, reaction, pin, unpin, location, dice, cleanText } = parseTags(content);
         const handledKey = buildHandledKey(content);
         pruneRecentlyHandled();
         log.info(
-          `[${TAG}] parsed tags — prompt=${prompt ? "yes" : "no"} reaction=${reaction ? "yes" : "no"} cleanTextLen=${cleanText.length}`,
+          `[${TAG}] parsed tags — prompt=${prompt ? "yes" : "no"} reaction=${reaction ? "yes" : "no"} pin=${pin} unpin=${unpin} location=${location ? "yes" : "no"} dice=${dice ?? "no"} cleanTextLen=${cleanText.length}`,
         );
 
         // Send the button prompt if present
@@ -228,6 +232,42 @@ function register(api: any): void {
           }
         }
 
+        // Pin the previous message if [PIN] tag present
+        if (pin) {
+          log.info(`[${TAG}] pinning message`);
+          if (lastUserMessageId !== null) {
+            const ok = await tg.pinChatMessage(config.chatId, lastUserMessageId);
+            if (ok) log.info(`[${TAG}] intercepted [PIN] → pinned msg=${lastUserMessageId}`);
+            else log.warn(`[${TAG}] intercepted [PIN] but pin failed`);
+          } else {
+            log.warn(`[${TAG}] intercepted [PIN] but no user message_id captured yet`);
+          }
+        }
+
+        // Unpin the current pinned message if [UNPIN] tag present
+        if (unpin) {
+          log.info(`[${TAG}] unpinning current message`);
+          const ok = await tg.unpinChatMessage(config.chatId);
+          if (ok) log.info(`[${TAG}] intercepted [UNPIN]`);
+          else log.warn(`[${TAG}] intercepted [UNPIN] but unpin failed`);
+        }
+
+        // Send location if [LOCATION:lat,lon] tag present
+        if (location) {
+          log.info(`[${TAG}] sending location — lat=${location.latitude} lon=${location.longitude}`);
+          const locMsgId = await tg.sendLocation(config.chatId, location.latitude, location.longitude);
+          if (locMsgId !== null) log.info(`[${TAG}] intercepted [LOCATION] → msg=${locMsgId}`);
+          else log.warn(`[${TAG}] intercepted [LOCATION] but send failed`);
+        }
+
+        // Send dice if [DICE] tag present
+        if (dice) {
+          log.info(`[${TAG}] sending dice — emoji=${dice}`);
+          const diceMsgId = await tg.sendDice(config.chatId, dice);
+          if (diceMsgId !== null) log.info(`[${TAG}] intercepted [DICE:${dice}] → msg=${diceMsgId}`);
+          else log.warn(`[${TAG}] intercepted [DICE:${dice}] but send failed`);
+        }
+
         // Forward any remaining text
         if (cleanText) {
           log.info(`[${TAG}] forwarding clean text — len=${cleanText.length}`);
@@ -265,7 +305,7 @@ function register(api: any): void {
       }
 
       log.warn(`[${TAG}] message_sent fallback engaged — tags escaped message_sending interception`);
-      const { prompt, reaction, cleanText } = parseTags(content);
+      const { prompt, reaction, pin, unpin, location, dice, cleanText } = parseTags(content);
 
       if (prompt) {
         const messageId = await tg.sendMessage(
@@ -293,6 +333,34 @@ function register(api: any): void {
         } else {
           log.warn(`[${TAG}] fallback [REACT:${reaction}] but no user message_id captured yet`);
         }
+      }
+
+      if (pin) {
+        if (lastUserMessageId !== null) {
+          const ok = await tg.pinChatMessage(config.chatId, lastUserMessageId);
+          if (ok) log.info(`[${TAG}] fallback [PIN] → pinned msg=${lastUserMessageId}`);
+          else log.warn(`[${TAG}] fallback [PIN] failed`);
+        } else {
+          log.warn(`[${TAG}] fallback [PIN] but no user message_id captured yet`);
+        }
+      }
+
+      if (unpin) {
+        const ok = await tg.unpinChatMessage(config.chatId);
+        if (ok) log.info(`[${TAG}] fallback [UNPIN]`);
+        else log.warn(`[${TAG}] fallback [UNPIN] failed`);
+      }
+
+      if (location) {
+        const locMsgId = await tg.sendLocation(config.chatId, location.latitude, location.longitude);
+        if (locMsgId !== null) log.info(`[${TAG}] fallback [LOCATION] → msg=${locMsgId}`);
+        else log.warn(`[${TAG}] fallback [LOCATION] send failed`);
+      }
+
+      if (dice) {
+        const diceMsgId = await tg.sendDice(config.chatId, dice);
+        if (diceMsgId !== null) log.info(`[${TAG}] fallback [DICE:${dice}] → msg=${diceMsgId}`);
+        else log.warn(`[${TAG}] fallback [DICE:${dice}] send failed`);
       }
 
       if (cleanText) {
@@ -508,6 +576,141 @@ function register(api: any): void {
     },
   }, { name: "telegram_ui_react" });
 
+  api.registerTool({
+    name: "telegram_ui_pin",
+    label: "Telegram UI Pin",
+    description: "Pin the last inbound Telegram user message in the chat.",
+    parameters: {
+      type: "object",
+      properties: {
+        disable_notification: {
+          type: "boolean",
+          description: "If true (default), pin silently without notifying members.",
+        },
+      },
+      additionalProperties: false,
+    },
+    async execute(_toolCallId: string, params: { disable_notification?: unknown }) {
+      const silent = typeof params.disable_notification === "boolean" ? params.disable_notification : true;
+
+      if (lastUserMessageId === null) {
+        return {
+          content: [{ type: "text", text: JSON.stringify({ ok: false, error: "no inbound Telegram message_id captured yet" }, null, 2) }],
+          details: { ok: false, error: "no inbound Telegram message_id captured yet" },
+        };
+      }
+
+      const ok = await tg.pinChatMessage(config.chatId, lastUserMessageId, silent);
+      const payload = ok
+        ? { ok: true, messageId: lastUserMessageId }
+        : { ok: false, messageId: lastUserMessageId, error: "pin request failed" };
+
+      if (ok) log.info(`[${TAG}] tool pinned message_id=${lastUserMessageId}`);
+      else log.warn(`[${TAG}] tool pin failed for message_id=${lastUserMessageId}`);
+
+      return {
+        content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
+        details: payload,
+      };
+    },
+  }, { name: "telegram_ui_pin" });
+
+  api.registerTool({
+    name: "telegram_ui_unpin",
+    label: "Telegram UI Unpin",
+    description: "Unpin the current pinned message in the configured Telegram chat.",
+    parameters: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+    async execute() {
+      const ok = await tg.unpinChatMessage(config.chatId);
+      const payload = ok
+        ? { ok: true }
+        : { ok: false, error: "unpin request failed" };
+
+      if (ok) log.info(`[${TAG}] tool unpinned current pinned message`);
+      else log.warn(`[${TAG}] tool unpin failed`);
+
+      return {
+        content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
+        details: payload,
+      };
+    },
+  }, { name: "telegram_ui_unpin" });
+
+  api.registerTool({
+    name: "telegram_ui_location",
+    label: "Telegram UI Location",
+    description: "Send a location (map pin) to the configured Telegram chat.",
+    parameters: {
+      type: "object",
+      properties: {
+        latitude: { type: "number", description: "Latitude of the location." },
+        longitude: { type: "number", description: "Longitude of the location." },
+      },
+      required: ["latitude", "longitude"],
+      additionalProperties: false,
+    },
+    async execute(_toolCallId: string, params: { latitude?: unknown; longitude?: unknown }) {
+      const lat = typeof params.latitude === "number" ? params.latitude : NaN;
+      const lon = typeof params.longitude === "number" ? params.longitude : NaN;
+
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+        return {
+          content: [{ type: "text", text: JSON.stringify({ ok: false, error: "valid latitude and longitude are required" }, null, 2) }],
+          details: { ok: false, error: "valid latitude and longitude are required" },
+        };
+      }
+
+      const messageId = await tg.sendLocation(config.chatId, lat, lon);
+      const payload = messageId !== null
+        ? { ok: true, latitude: lat, longitude: lon, messageId }
+        : { ok: false, error: "failed to send location" };
+
+      if (messageId !== null) log.info(`[${TAG}] tool sent location (${lat},${lon}) → msg=${messageId}`);
+      else log.warn(`[${TAG}] tool location send failed`);
+
+      return {
+        content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
+        details: payload,
+      };
+    },
+  }, { name: "telegram_ui_location" });
+
+  api.registerTool({
+    name: "telegram_ui_dice",
+    label: "Telegram UI Dice",
+    description: "Send an animated dice/slot/dart emoji to the configured Telegram chat. Valid emojis: 🎲 🎯 🏀 ⚽ 🎳 🎰",
+    parameters: {
+      type: "object",
+      properties: {
+        emoji: {
+          type: "string",
+          description: "Dice emoji to send. Defaults to 🎲. Valid: 🎲 🎯 🏀 ⚽ 🎳 🎰",
+        },
+      },
+      additionalProperties: false,
+    },
+    async execute(_toolCallId: string, params: { emoji?: unknown }) {
+      const emoji = typeof params.emoji === "string" ? params.emoji.trim() : "🎲";
+
+      const messageId = await tg.sendDice(config.chatId, emoji || "🎲");
+      const payload = messageId !== null
+        ? { ok: true, emoji: emoji || "🎲", messageId }
+        : { ok: false, error: "failed to send dice" };
+
+      if (messageId !== null) log.info(`[${TAG}] tool sent dice ${emoji || "🎲"} → msg=${messageId}`);
+      else log.warn(`[${TAG}] tool dice send failed`);
+
+      return {
+        content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
+        details: payload,
+      };
+    },
+  }, { name: "telegram_ui_dice" });
+
   // ─── Done ────────────────────────────────────────────────────────────
 
   if (config.verbose) {
@@ -522,7 +725,7 @@ export default {
   id: "telegram-ui",
   name: "Telegram UI",
   description:
-    "Gives agents Telegram UI tools: inline button prompts and message reactions.",
+    "Gives agents Telegram UI tools: inline button prompts, reactions, pinning, unpinning, locations, and dice.",
   version: PLUGIN_VERSION,
   kind: "extension" as const,
   register,

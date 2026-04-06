@@ -17,6 +17,22 @@ describe("hasTags", () => {
   it("detects mixed message", () => {
     expect(hasTags("Sure! [REACT:😊]")).toBe(true);
   });
+
+  it("detects [PIN]", () => {
+    expect(hasTags("[PIN]")).toBe(true);
+  });
+
+  it("detects [UNPIN]", () => {
+    expect(hasTags("[UNPIN]")).toBe(true);
+  });
+
+  it("detects [LOCATION:lat,lon]", () => {
+    expect(hasTags("[LOCATION:40.4168,-3.7038]")).toBe(true);
+  });
+
+  it("detects [DICE]", () => {
+    expect(hasTags("[DICE]")).toBe(true);
+  });
 });
 
 describe("parseTags — buttons", () => {
@@ -72,6 +88,54 @@ describe("parseTags — reactions", () => {
   });
 });
 
+describe("parseTags — pin, location, and dice", () => {
+  it("parses [PIN]", () => {
+    const { pin, unpin, location, dice, cleanText } = parseTags("[PIN]");
+    expect(pin).toBe(true);
+    expect(unpin).toBe(false);
+    expect(location).toBeNull();
+    expect(dice).toBeNull();
+    expect(cleanText).toBe("");
+  });
+
+  it("parses [UNPIN]", () => {
+    const { pin, unpin, location, dice, cleanText } = parseTags("[UNPIN]");
+    expect(pin).toBe(false);
+    expect(unpin).toBe(true);
+    expect(location).toBeNull();
+    expect(dice).toBeNull();
+    expect(cleanText).toBe("");
+  });
+
+  it("parses a valid [LOCATION:lat,lon]", () => {
+    const { location, pin, unpin, dice, cleanText } = parseTags("[LOCATION:40.4168,-3.7038]");
+    expect(location).toEqual({ latitude: 40.4168, longitude: -3.7038 });
+    expect(pin).toBe(false);
+    expect(unpin).toBe(false);
+    expect(dice).toBeNull();
+    expect(cleanText).toBe("");
+  });
+
+  it("rejects invalid [LOCATION:lat,lon] values", () => {
+    const { location } = parseTags("[LOCATION:not-a-lat,-3.7038]");
+    expect(location).toBeNull();
+  });
+
+  it("parses [DICE] with default emoji", () => {
+    const { dice, pin, unpin, location, cleanText } = parseTags("[DICE]");
+    expect(dice).toBe("🎲");
+    expect(pin).toBe(false);
+    expect(unpin).toBe(false);
+    expect(location).toBeNull();
+    expect(cleanText).toBe("");
+  });
+
+  it("parses [DICE:🎰] with explicit emoji", () => {
+    const { dice } = parseTags("[DICE:🎰]");
+    expect(dice).toBe("🎰");
+  });
+});
+
 describe("parseTags — clean text", () => {
   it("preserves text before a reaction tag", () => {
     const { cleanText, reaction } = parseTags("Got it! [REACT:👍]");
@@ -91,7 +155,7 @@ describe("parseTags — clean text", () => {
   });
 
   it("returns empty string when message is only tags", () => {
-    const { cleanText } = parseTags("[REACT:😊][BUTTONS:Q|A|B]");
+    const { cleanText } = parseTags("[REACT:😊][BUTTONS:Q|A|B][PIN][UNPIN][LOCATION:1,2][DICE]");
     expect(cleanText).toBe("");
   });
 

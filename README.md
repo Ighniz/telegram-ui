@@ -1,6 +1,6 @@
 # telegram-ui
 
-OpenClaw plugin that gives agents two Telegram UI primitives: **inline button prompts** and **emoji reactions**.
+OpenClaw plugin that gives agents Telegram UI primitives: **inline button prompts**, **emoji reactions**, **pin/unpin**, **locations**, and **dice**.
 
 ## What it does
 
@@ -8,6 +8,10 @@ OpenClaw plugin that gives agents two Telegram UI primitives: **inline button pr
 |---|---|---|
 | Inline buttons | `[BUTTONS:Question\|Option A\|Option B]` | Sends an interactive inline keyboard to Telegram |
 | Emoji reaction | `[REACT:👍]` | Reacts to the user's last message |
+| Pin last inbound message | `[PIN]` | Pins the previous inbound Telegram message |
+| Unpin current pinned message | `[UNPIN]` | Removes the current chat pin |
+| Location | `[LOCATION:lat,lon]` | Sends a Telegram map pin |
+| Dice | `[DICE]` or `[DICE:🎰]` | Sends an animated dice/game emoji |
 
 Tags can appear anywhere in an agent reply. When detected, the original message is suppressed, any surrounding text is sent as a plain message, and the UI element is sent separately.
 
@@ -21,11 +25,9 @@ When the user taps a button, the prompt message is updated with a ✅ indicator 
 
 ## Installation
 
-Requires OpenClaw **2026.3.31** or later.
-
 ```bash
 # In your OpenClaw project
-openclaw plugins install clawhub:telegram-ui
+openclaw plugin add Ighniz/telegram-ui
 ```
 
 ## Configuration
@@ -79,6 +81,37 @@ For cases where you need the result inline:
 
 - **`telegram_ui_buttons`** — `{ question, options: string[], follow_up_text? }`
 - **`telegram_ui_react`** — `{ emoji }`
+- **`telegram_ui_pin`** — `{ disable_notification? }`
+- **`telegram_ui_unpin`** — `{}`
+- **`telegram_ui_location`** — `{ latitude, longitude }`
+- **`telegram_ui_dice`** — `{ emoji? }`
+
+### Quick test routine
+
+If the user says things like `test your telegram-ui abilities`, `test telegram-ui plugin`, or `run telegram-ui checks`, treat that as a request to test **all** supported abilities in one go.
+
+Recommended sequence:
+
+1. Add a reaction to the triggering user message.
+2. Send a short status line.
+3. Send a dice message.
+4. Send a location.
+5. Pin the relevant message.
+6. Unpin it.
+7. End with buttons or a short confirmation question such as `Is everything working?`
+
+Example output pattern:
+
+```text
+[[reply_to_current]] [REACT:👀] Testing telegram-ui abilities now.
+[DICE]
+[LOCATION:-34.9319,-56.1592]
+[PIN]
+[UNPIN]
+[BUTTONS:Is everything working?|Yes|No]
+```
+
+Keep this routine updated whenever a new telegram-ui ability is added, because otherwise the plugin documentation becomes fan fiction.
 
 ### `/uistatus` command
 

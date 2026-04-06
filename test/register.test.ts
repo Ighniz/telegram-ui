@@ -70,6 +70,10 @@ function setupDefaultFetchResponses(): void {
   setFetchResponse("sendMessage", { ok: true, result: { message_id: 100 } });
   setFetchResponse("editMessageText", { ok: true, result: true });
   setFetchResponse("setMessageReaction", { ok: true, result: true });
+  setFetchResponse("pinChatMessage", { ok: true, result: true });
+  setFetchResponse("unpinChatMessage", { ok: true, result: true });
+  setFetchResponse("sendLocation", { ok: true, result: { message_id: 101 } });
+  setFetchResponse("sendDice", { ok: true, result: { message_id: 102 } });
   setFetchResponse("getMe", { ok: true, result: { username: "testbot" } });
 }
 
@@ -115,11 +119,15 @@ describe("register — plugin wiring", () => {
     expect(events).toContain("message_received");
   });
 
-  it("registers both tools", () => {
+  it("registers all Telegram UI tools", () => {
     const api = registerPlugin();
     const toolNames = api.registerTool.mock.calls.map((c: any) => c[0].name);
     expect(toolNames).toContain("telegram_ui_buttons");
     expect(toolNames).toContain("telegram_ui_react");
+    expect(toolNames).toContain("telegram_ui_pin");
+    expect(toolNames).toContain("telegram_ui_unpin");
+    expect(toolNames).toContain("telegram_ui_location");
+    expect(toolNames).toContain("telegram_ui_dice");
   });
 
   it("registers the cleanup service", () => {
@@ -294,6 +302,119 @@ describe("message_sending — tag interception", () => {
     expect(api.logger.warn).toHaveBeenCalledWith(
       expect.stringContaining("no user message_id captured yet"),
     );
+  });
+
+  it("intercepts [PIN] and pins the last captured user message", async () => {
+    const api = registerPlugin();
+    const receivedHandler = getReceivedHandler(api);
+    const sendingHandler = getSendingHandler(api);
+
+    await receivedHandler(
+      { content: "Hello", messageId: 84 },
+      { channelId: "telegram" },
+    );
+
+    const result = await sendingHandler(
+      { content: "[PIN]" },
+      { channelId: "telegram" },
+    );
+
+    expect(result).toEqual({ cancel: true });
+
+    const fetchMock = vi.mocked(fetch);
+    const pinCalls = fetchMock.mock.calls.filter(c =>
+      (c[0] as string).endsWith("/pinChatMessage"),
+    );
+    expect(pinCalls.length).toBe(1);
+
+    const body = JSON.parse((pinCalls[0][1] as any).body);
+    expect(body.message_id).toBe(84);
+    expect(body.disable_notification).toBe(true);
+  });
+
+  it("intercepts [UNPIN] and unpins the current pinned message", async () => {
+    const api = registerPlugin();
+    const handler = getSendingHandler(api);
+
+    const result = await handler(
+      { content: "[UNPIN]" },
+      { channelId: "telegram" },
+    );
+
+    expect(result).toEqual({ cancel: true });
+
+    const fetchMock = vi.mocked(fetch);
+    const unpinCalls = fetchMock.mock.calls.filter(c =>
+      (c[0] as string).endsWith("/unpinChatMessage"),
+    );
+    expect(unpinCalls.length).toBe(1);
+
+    const body = JSON.parse((unpinCalls[0][1] as any).body);
+    expect(body.chat_id).toBe("123456");
+  });
+
+  it("intercepts [LOCATION:lat,lon] and sends a location", async () => {
+    const api = registerPlugin();
+    const handler = getSendingHandler(api);
+
+    const result = await handler(
+      { content: "[LOCATION:40.4168,-3.7038]" },
+      { channelId: "telegram" },
+    );
+
+    expect(result).toEqual({ cancel: true });
+
+    const fetchMock = vi.mocked(fetch);
+    const locationCalls = fetchMock.mock.calls.filter(c =>
+      (c[0] as string).endsWith("/sendLocation"),
+    );
+    expect(locationCalls.length).toBe(1);
+
+    const body = JSON.parse((locationCalls[0][1] as any).body);
+    expect(body.latitude).toBe(40.4168);
+    expect(body.longitude).toBe(-3.7038);
+  });
+
+  it("intercepts [DICE] and sends the default dice emoji", async () => {
+    const api = registerPlugin();
+    const handler = getSendingHandler(api);
+
+    const result = await handler(
+      { content: "[DICE]" },
+      { channelId: "telegram" },
+    );
+
+    expect(result).toEqual({ cancel: true });
+
+    const fetchMock = vi.mocked(fetch);
+    const diceCalls = fetchMock.mock.calls.filter(c =>
+      (c[0] as string).endsWith("/sendDice"),
+    );
+    expect(diceCalls.length).toBe(1);
+
+    const body = JSON.parse((diceCalls[0][1] as any).body);
+    expect(body.emoji).toBe("🎲");
+  });
+
+  it("intercepts [DICE:🎰] and sends the requested emoji", async () => {
+    const api = registerPlugin();
+    const handler = getSendingHandler(api);
+
+    const result = await handler(
+      { content: "[DICE:🎰]" },
+      { channelId: "telegram" },
+    );
+
+    expect(result).toEqual({ cancel: true });
+
+    const fetchMock = vi.mocked(fetch);
+    const diceCalls = fetchMock.mock.calls.filter(c =>
+      (c[0] as string).endsWith("/sendDice"),
+    );
+    expect(diceCalls.length).toBe(1);
+
+    const body = JSON.parse((diceCalls[0][1] as any).body);
+    expect(body.emoji).toBe("🎰");
   });
 
   it("cancels even when sendMessage fails", async () => {
@@ -598,5 +719,95 @@ describe("telegram_ui_react tool", () => {
     const result = await tool.execute("call-r4", { emoji: "🐛" });
     expect(result.details.ok).toBe(false);
     expect(result.details.error).toContain("failed");
+  });
+});
+
+describe("telegram_ui_pin tool", () => {
+  it("pins the last captured message", async () => {
+    const api = registerPlugin();
+    const receivedHandler = getReceivedHandler(api);
+    const tool = api._tools["telegram_ui_pin"];
+
+    await receivedHandler(
+      { content: "Hi", messageId: 61 },
+      { channelId: "telegram" },
+    );
+
+    const result = await tool.execute("call-p1", {});
+    expect(result.details.ok).toBe(true);
+    expect(result.details.messageId).toBe(61);
+  });
+
+  it("returns error when no message_id captured", async () => {
+    const api = registerPlugin();
+    const tool = api._tools["telegram_ui_pin"];
+
+    const result = await tool.execute("call-p2", {});
+    expect(result.details.ok).toBe(false);
+    expect(result.details.error).toContain("no inbound");
+  });
+});
+
+describe("telegram_ui_unpin tool", () => {
+  it("unpins the current pinned message", async () => {
+    const api = registerPlugin();
+    const tool = api._tools["telegram_ui_unpin"];
+
+    const result = await tool.execute("call-u1", {});
+    expect(result.details.ok).toBe(true);
+  });
+
+  it("returns error when unpin API call fails", async () => {
+    setFetchResponse("unpinChatMessage", { ok: false, description: "nothing to unpin" });
+
+    const api = registerPlugin();
+    const tool = api._tools["telegram_ui_unpin"];
+
+    const result = await tool.execute("call-u2", {});
+    expect(result.details.ok).toBe(false);
+    expect(result.details.error).toContain("unpin");
+  });
+});
+
+describe("telegram_ui_location tool", () => {
+  it("sends a location and returns ok", async () => {
+    const api = registerPlugin();
+    const tool = api._tools["telegram_ui_location"];
+
+    const result = await tool.execute("call-l1", { latitude: 51.5074, longitude: -0.1278 });
+    expect(result.details.ok).toBe(true);
+    expect(result.details.latitude).toBe(51.5074);
+    expect(result.details.longitude).toBe(-0.1278);
+    expect(result.details.messageId).toBe(101);
+  });
+
+  it("returns error for invalid coordinates", async () => {
+    const api = registerPlugin();
+    const tool = api._tools["telegram_ui_location"];
+
+    const result = await tool.execute("call-l2", { latitude: "bad", longitude: -0.1278 });
+    expect(result.details.ok).toBe(false);
+    expect(result.details.error).toContain("latitude and longitude");
+  });
+});
+
+describe("telegram_ui_dice tool", () => {
+  it("sends the default dice emoji", async () => {
+    const api = registerPlugin();
+    const tool = api._tools["telegram_ui_dice"];
+
+    const result = await tool.execute("call-d1", {});
+    expect(result.details.ok).toBe(true);
+    expect(result.details.emoji).toBe("🎲");
+    expect(result.details.messageId).toBe(102);
+  });
+
+  it("sends a requested dice emoji", async () => {
+    const api = registerPlugin();
+    const tool = api._tools["telegram_ui_dice"];
+
+    const result = await tool.execute("call-d2", { emoji: "🎯" });
+    expect(result.details.ok).toBe(true);
+    expect(result.details.emoji).toBe("🎯");
   });
 });

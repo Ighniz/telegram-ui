@@ -1,11 +1,11 @@
 ---
 name: telegram-ui
-description: Show Telegram inline buttons and emoji reactions in your replies. Use when offering choices, multiple-choice clarifications, or acknowledging messages. Triggers on "pick one", "choose", offering options, or any reply where tappable buttons improve UX.
+description: Show Telegram inline buttons, emoji reactions, pin and unpin messages, send locations, roll dice, and run a full Telegram UI self-test in your replies. Use when offering choices, acknowledging messages, pinning or unpinning, sending map pins, sending playful dice/game emojis, or when the user asks to test telegram-ui abilities or test the telegram-ui plugin.
 ---
 
-# Telegram UI — Buttons & Reactions
+# Telegram UI
 
-You have two Telegram UI primitives. Use them freely in conversations.
+You have several Telegram UI primitives. Use them freely in conversations.
 
 ## Inline Buttons
 
@@ -44,14 +44,89 @@ A reaction can be your **entire response** — no text needed. When the user is 
 [REACT:👋] Hey! [BUTTONS:What do you need?|Quick question|Help with a task|Just chatting]
 ```
 
+## Pin and Unpin
+
+```
+[PIN]
+```
+
+Pins the last inbound Telegram message.
+
+```
+[UNPIN]
+```
+
+Removes the current pinned message.
+
+## Location
+
+```
+[LOCATION:lat,lon]
+```
+
+Sends a Telegram location pin.
+
+## Dice
+
+```
+[DICE]
+```
+
+Or choose a supported emoji explicitly:
+
+```
+[DICE:🎰]
+```
+
+Supported Telegram dice/game emojis commonly include: `🎲 🎯 🏀 ⚽ 🎳 🎰`
+
+## Full Self-Test Routine
+
+When the user says things like:
+- `test your telegram-ui abilities`
+- `test telegram-ui plugin`
+- `run telegram-ui checks`
+
+Treat that as a request to test **all** abilities in sequence, without waiting for button taps between steps.
+
+Recommended sequence:
+
+1. Send a reaction on the user message.
+2. Send a plain text status line saying the full telegram-ui test is running.
+3. Send inline buttons for a final confirmation question only.
+4. Send a dice message.
+5. Send a location.
+6. Pin the relevant recent message.
+7. Unpin it.
+8. Optionally end with a short text asking whether everything worked.
+
+Use the buttons near the end or alongside the final confirmation, not as a gate that blocks the rest of the routine.
+
+Example pattern:
+
+```text
+[REACT:👀] Testing telegram-ui abilities now.
+[DICE]
+[LOCATION:-34.9319,-56.1592]
+[PIN]
+[UNPIN]
+[BUTTONS:Is everything working?|Yes|No]
+```
+
+If the user asks to test a specific ability only, test just that ability.
+
 ## Explicit Tools
 
 For programmatic use (when you need the message ID back):
 
 - **telegram_ui_buttons** — `{ question, options, follow_up_text? }`
 - **telegram_ui_react** — `{ emoji }`
+- **telegram_ui_pin** — `{ disable_notification? }`
+- **telegram_ui_unpin** — `{}`
+- **telegram_ui_location** — `{ latitude, longitude }`
+- **telegram_ui_dice** — `{ emoji? }`
 
-Prefer the tag syntax in normal conversation — it's simpler.
+Prefer the tag syntax in normal conversation, unless a tool return value matters.
 
 ## Guidelines
 
