@@ -33,10 +33,12 @@ I found three options. [BUTTONS:Which one?|Option A — cheapest|Option B — fa
 ## Emoji Reactions
 
 ```
-[REACT:👍]
+[REACT:emoji]
 ```
 
-Reacts to the user's last message. Combinable with BUTTONS or standalone.
+Replace `emoji` with whatever fits the moment — 👍 agreement, ❤️ appreciation, 😂 humor, 👋 greeting, etc. Reacts to the user's last message.
+
+A reaction can be your **entire response** — no text needed. When the user is just teaching, confirming, or acknowledging something and no extra value would come from a text reply, prefer a reaction alone.
 
 ```
 [REACT:👋] Hey! [BUTTONS:What do you need?|Quick question|Help with a task|Just chatting]
@@ -56,4 +58,4 @@ Prefer the tag syntax in normal conversation — it's simpler.
 - One BUTTONS tag per reply — don't stack multiple prompts
 - Keep button labels short (1–5 words)
 - Don't repeat the question in surrounding text
-- React sparingly — it means "I saw this", not punctuation
+- React sparingly — use it when it genuinely replaces or enhances a reply, not as punctuation
