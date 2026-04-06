@@ -21,9 +21,11 @@ When the user taps a button, the prompt message is updated with a ✅ indicator 
 
 ## Installation
 
+Requires OpenClaw **2026.3.31** or later.
+
 ```bash
 # In your OpenClaw project
-openclaw plugin add Ighniz/telegram-ui
+openclaw plugins install clawhub:telegram-ui
 ```
 
 ## Configuration
