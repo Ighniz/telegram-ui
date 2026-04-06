@@ -1,0 +1,5 @@
+{
+  "name": "telegram-ui",
+  "description": "Telegram inline buttons and emoji reactions via the telegram-ui plugin",
+  "version": "1.0.0"
+}

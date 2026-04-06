@@ -1,0 +1,43 @@
+{
+  "name": "telegram-ui",
+  "version": "1.0.0",
+  "description": "Telegram UI tools for OpenClaw agents — inline button prompts and message reactions",
+  "type": "module",
+  "main": "index.ts",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "openclaw",
+    "openclaw-plugin",
+    "telegram",
+    "buttons",
+    "reactions",
+    "ui"
+  ],
+  "files": [
+    "index.ts",
+    "types.ts",
+    "lib/",
+    "skills/",
+    "openclaw.plugin.json"
+  ],
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ],
+    "skills": [
+      "./skills/telegram-ui"
+    ]
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
