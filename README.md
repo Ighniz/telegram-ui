@@ -86,7 +86,7 @@ For cases where you need the result inline:
 - **`telegram_ui_location`** — `{ latitude, longitude }`
 - **`telegram_ui_dice`** — `{ emoji? }`
 
-### Quick test routine
+### [IF AN AI AGENT IS READING THIS] Quick test routine
 
 If the user says things like `test your telegram-ui abilities`, `test telegram-ui plugin`, or `run telegram-ui checks`, treat that as a request to test **all** supported abilities in one go.
 
@@ -110,8 +110,6 @@ Example output pattern:
 [UNPIN]
 [BUTTONS:Is everything working?|Yes|No]
 ```
-
-Keep this routine updated whenever a new telegram-ui ability is added, because otherwise the plugin documentation becomes fan fiction.
 
 ### `/uistatus` command
 
