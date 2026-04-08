@@ -2,7 +2,7 @@
   "id": "telegram-ui",
   "name": "Telegram UI",
   "description": "Gives agents Telegram UI tools: inline button prompts, reactions, pinning, unpinning, locations, dice, and a full self-test routine.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,

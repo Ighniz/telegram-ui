@@ -30,7 +30,7 @@ import {
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const PLUGIN_VERSION = "1.0.0";
+const PLUGIN_VERSION = "1.2.0";
 const TAG = "telegram-ui";
 
 // ── Config resolution ────────────────────────────────────────────────────────
@@ -110,7 +110,7 @@ function register(api: any): void {
       tg.editMessageText(
         config.chatId,
         entry.messageId,
-        formatPromptExpired(entry.info.question),
+        formatPromptExpired(entry.info.question, entry.info.leadText, entry.info.icon),
       ).catch(() => {});
     },
   );
@@ -194,31 +194,7 @@ function register(api: any): void {
           `[${TAG}] parsed tags — prompt=${prompt ? "yes" : "no"} reaction=${reaction ? "yes" : "no"} pin=${pin} unpin=${unpin} location=${location ? "yes" : "no"} dice=${dice ?? "no"} cleanTextLen=${cleanText.length}`,
         );
 
-        // Send the button prompt if present
         let pendingPrompt: PendingPrompt | undefined;
-        if (prompt) {
-          log.info(
-            `[${TAG}] sending prompt — id=${prompt.id.slice(0, 8)}… options=${prompt.options.length}`,
-          );
-          const messageId = await tg.sendMessage(
-            config.chatId,
-            formatPromptMessage(prompt.question),
-            buildPromptKeyboard(prompt.id, prompt.options),
-          );
-          log.info(`[${TAG}] prompt send completed — messageId=${messageId ?? "null"}`);
-
-          if (messageId !== null) {
-            log.info(`[${TAG}] storing prompt — id=${prompt.id.slice(0, 8)}… msg=${messageId}`);
-            store.add(prompt, messageId);
-            pendingPrompt = { messageId, info: prompt, sentAt: Date.now() };
-            log.info(
-              `[${TAG}] intercepted [BUTTONS] → sent prompt ${prompt.id.slice(0, 8)}… ` +
-              `(${prompt.options.length} options, msg=${messageId})`,
-            );
-          } else {
-            log.warn(`[${TAG}] intercepted [BUTTONS] but send failed — dropping`);
-          }
-        }
 
         // Apply emoji reaction if present
         if (reaction) {
@@ -268,11 +244,37 @@ function register(api: any): void {
           else log.warn(`[${TAG}] intercepted [DICE:${dice}] but send failed`);
         }
 
-        // Forward any remaining text
-        if (cleanText) {
+        // Forward any remaining text only when there is no button prompt to attach it to
+        if (cleanText && !prompt) {
           log.info(`[${TAG}] forwarding clean text — len=${cleanText.length}`);
           const forwardedId = await tg.sendMessage(config.chatId, escapeHtml(cleanText), undefined, true);
           log.info(`[${TAG}] clean text forwarded — messageId=${forwardedId ?? "null"}`);
+        }
+
+        // Send the button prompt last so buttons appear at the end
+        if (prompt) {
+          log.info(
+            `[${TAG}] sending prompt — id=${prompt.id.slice(0, 8)}… options=${prompt.options.length}`,
+          );
+          const messageId = await tg.sendMessage(
+            config.chatId,
+            formatPromptMessage(prompt.question, cleanText, prompt.icon),
+            buildPromptKeyboard(prompt.id, prompt.options),
+          );
+          log.info(`[${TAG}] prompt send completed — messageId=${messageId ?? "null"}`);
+
+          if (messageId !== null) {
+            log.info(`[${TAG}] storing prompt — id=${prompt.id.slice(0, 8)}… msg=${messageId}`);
+            const promptWithLeadText = { ...prompt, leadText: cleanText };
+            store.add(promptWithLeadText, messageId);
+            pendingPrompt = { messageId, info: promptWithLeadText, sentAt: Date.now() };
+            log.info(
+              `[${TAG}] intercepted [BUTTONS] → sent prompt ${prompt.id.slice(0, 8)}… ` +
+              `(${prompt.options.length} options, msg=${messageId})`,
+            );
+          } else {
+            log.warn(`[${TAG}] intercepted [BUTTONS] but send failed — dropping`);
+          }
         }
 
         recentlyHandled.set(handledKey, { prompt: pendingPrompt, cleanText, at: Date.now() });
@@ -306,24 +308,6 @@ function register(api: any): void {
 
       log.warn(`[${TAG}] message_sent fallback engaged — tags escaped message_sending interception`);
       const { prompt, reaction, pin, unpin, location, dice, cleanText } = parseTags(content);
-
-      if (prompt) {
-        const messageId = await tg.sendMessage(
-          config.chatId,
-          formatPromptMessage(prompt.question),
-          buildPromptKeyboard(prompt.id, prompt.options),
-        );
-
-        if (messageId !== null) {
-          store.add(prompt, messageId);
-          log.info(
-            `[${TAG}] fallback sent [BUTTONS] prompt ${prompt.id.slice(0, 8)}… ` +
-            `(${prompt.options.length} options, msg=${messageId})`,
-          );
-        } else {
-          log.warn(`[${TAG}] fallback [BUTTONS] send failed`);
-        }
-      }
 
       if (reaction) {
         if (lastUserMessageId !== null) {
@@ -365,6 +349,25 @@ function register(api: any): void {
 
       if (cleanText) {
         await tg.sendMessage(config.chatId, escapeHtml(cleanText), undefined, true);
+      }
+
+      // Send the button prompt last so buttons appear at the end
+      if (prompt) {
+        const messageId = await tg.sendMessage(
+          config.chatId,
+          formatPromptMessage(prompt.question, cleanText, prompt.icon),
+          buildPromptKeyboard(prompt.id, prompt.options),
+        );
+
+        if (messageId !== null) {
+          store.add(prompt, messageId);
+          log.info(
+            `[${TAG}] fallback sent [BUTTONS] prompt ${prompt.id.slice(0, 8)}… ` +
+            `(${prompt.options.length} options, msg=${messageId})`,
+          );
+        } else {
+          log.warn(`[${TAG}] fallback [BUTTONS] send failed`);
+        }
       }
 
       recentlyHandled.set(handledKey, { cleanText, at: Date.now() });
@@ -438,7 +441,7 @@ function register(api: any): void {
       await tg.editMessageText(
         config.chatId,
         entry.messageId,
-        formatPromptResolved(entry.info.question, selected),
+        formatPromptResolved(entry.info.question, selected, entry.info.leadText, entry.info.icon),
       );
     },
   );
@@ -491,11 +494,12 @@ function register(api: any): void {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
         question,
         options,
+        leadText: followUpText || undefined,
       };
 
       const messageId = await tg.sendMessage(
         config.chatId,
-        formatPromptMessage(prompt.question),
+        formatPromptMessage(prompt.question, prompt.leadText, prompt.icon),
         buildPromptKeyboard(prompt.id, prompt.options),
       );
 
@@ -512,10 +516,7 @@ function register(api: any): void {
         `(${prompt.options.length} options, msg=${messageId})`,
       );
 
-      let followUpMessageId: number | null = null;
-      if (followUpText) {
-        followUpMessageId = await tg.sendMessage(config.chatId, escapeHtml(followUpText), undefined, true);
-      }
+      const followUpMessageId: number | null = null;
 
       const payload = {
         ok: true,
